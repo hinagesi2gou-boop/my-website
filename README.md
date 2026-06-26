@@ -3,7 +3,7 @@
 
 「10秒でおは/おや！Vtuber画像メーカー」は、ブラウザ上で手軽にVtuberさん向けの挨拶画像・動画を作成できるWebツールです。
 
-URL: [あなたのGitHub PagesのURLをここに貼り付けてください]
+URL: [(https://hinagesi2gou-boop.github.io/my-website/)]
 
 ## 📝 利用規約・ライセンス
 
