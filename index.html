@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>10秒でおは/おや！Vtuber画像メーカー</title>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@500&family=Yusei+Magic&family=Zen+Maru+Gothic:wght@700&display=swap" rel="stylesheet">
+
+<!-- Fabric.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+
+<style>
+  :root {
+    --primary: #4776E6;
+    --primary-gradient: linear-gradient(135deg, #8E54E9, #4776E6);
+    --secondary: #F0F4FD;
+    --success: #10b981;
+    --danger: #ef4444;
+    --x-color: #0F1419;
+    --bg-color: #F8FAFC;
+    --surface: #FFFFFF;
+    --text-main: #1E293B;
+    --text-muted: #64748B;
+    --border: #E2E8F0;
+  }
+
+  /* ✅ 要素全体のサイズ計算を統一し、はみ出しを防止 */
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body { height: 100vh; height: 100dvh; margin: 0; padding: 0; overflow: hidden; overscroll-behavior: none; }
+  body { font-family: 'Zen Maru Gothic', 'Inter', sans-serif; color: var(--text-main); background-color: var(--bg-color); }
+  .app-container { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; overflow: hidden; }
+
+  header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,0.05); z-index: 10; }
+  h1 { font-size: 15px; font-weight: 800; margin: 0; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+  #btn-toggle-anim { background: var(--secondary); color: var(--primary); border: none; border-radius: 20px; padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+  #btn-toggle-anim.anim-stopped { background: var(--border); color: var(--text-muted); }
+
+  .canvas-wrapper { flex-grow: 1; width: 100%; min-height: 0; display: flex; justify-content: center; align-items: center; position: relative; padding: 10px; box-sizing: border-box; touch-action: none; }
+  .canvas-container { box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-radius: 16px; overflow: hidden; will-change: transform; }
+
+  /* --- 📱 スマホ用操作パネル（ボトムシート） --- */
+  .control-bottom-sheet { 
+    background: var(--surface); border-top-left-radius: 24px; border-top-right-radius: 24px; 
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.05); padding: 15px 20px 30px 20px; flex-shrink: 0; z-index: 10; 
+    display: flex; flex-direction: column; gap: 10px; 
+    max-height: 55vh; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; 
+  }
+  .control-bottom-sheet::-webkit-scrollbar { width: 4px; }
+  .control-bottom-sheet::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+  /* --- 💻 PC用レイアウト（右側サイドパネル） --- */
+  @media (min-width: 768px) {
+    .app-container { flex-direction: row; }
+    .canvas-wrapper { height: 100vh; flex-grow: 1; }
+    .control-bottom-sheet {
+      width: 400px;
+      height: 100vh;
+      max-height: 100vh;
+      border-radius: 0;
+      border-left: 1px solid var(--border);
+      box-shadow: -4px 0 20px rgba(0,0,0,0.05);
+      padding: 20px 30px 60px 30px;
+    }
+    header { position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); border-radius: 12px; backdrop-filter: blur(10px); }
+  }
+
+  .ui-row { display: flex; gap: 8px; align-items: center; }
+  .ui-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+  input[type="text"], select { background: var(--bg-color); border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 600; color: var(--text-main); width: 100%; box-sizing: border-box; transition: all 0.2s; outline: none; cursor: pointer; appearance: none; text-align: center; font-family: inherit; }
+  input[type="text"] { text-align: left; background: var(--surface); border: 1px solid var(--border); }
+
+  .btn-upload { background: var(--secondary); color: var(--primary); display: block; text-align: center; padding: 10px; border-radius: 12px; font-weight: bold; font-size: 13px; }
+  .btn-primary { background: var(--primary-gradient); color: white; border: none; border-radius: 12px; padding: 12px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 4px 12px rgba(71, 118, 230, 0.3); width: 100%; transition: transform 0.1s; }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-export-video { background: linear-gradient(135deg, #11998e, #38ef7d); }
+  .btn-x-share { background: var(--x-color); color: white; }
+  .btn-small { background: var(--bg-color); color: var(--text-muted); border: none; border-radius: 8px; padding: 10px; font-size: 11px; font-weight: bold; cursor: pointer; flex: 1; }
+  .btn-small:hover { background: #e2e8f0; color: var(--text-main); }
+  
+  .note { font-size: 10px; color: var(--text-muted); text-align: center; margin: 0; line-height: 1.4; }
+
+  /* 利用規約・使い方（アコーディオン）のデザイン */
+  .disclaimer-accordion { background: var(--bg-color); border-radius: 12px; overflow: hidden; margin-top: 5px; flex-shrink: 0; }
+  .disclaimer-accordion summary { padding: 12px; font-size: 12px; font-weight: bold; color: var(--text-muted); cursor: pointer; list-style: none; text-align: center; outline: none; transition: background 0.2s; }
+  .disclaimer-accordion summary:hover { background: #e2e8f0; }
+  .disclaimer-accordion summary::-webkit-details-marker { display: none; }
+  .disclaimer-content { padding: 0 15px 15px; font-size: 11px; line-height: 1.6; color: var(--text-muted); text-align: left; }
+  .disclaimer-content p { margin: 10px 0 0 0; }
+  .disclaimer-content strong { color: var(--text-main); font-size: 12px; display: inline-block; margin-bottom: 2px; }
+  .disclaimer-content ul { margin: 4px 0 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <header>
+    <h1>☀️🌙 10秒でおは/おや！画像メーカー</h1>
+    <button id="btn-toggle-anim">⏸️ アニメ停止</button>
+  </header>
+
+  <div class="canvas-wrapper">
+    <canvas id="mainCanvas"></canvas>
+  </div>
+
+  <div class="control-bottom-sheet" id="bottom-sheet">
+    <div class="ui-grid">
+      <div style="position: relative; overflow: hidden; width: 100%;">
+        <span class="btn-upload">🖼️ 立ち絵</span>
+        <input type="file" id="image-upload" accept="image/png, image/jpeg, image/webp" style="position: absolute; opacity: 0; top:0; width:100%; height:100%; cursor: pointer;">
+      </div>
+      <select id="greeting-select">
+        <option value="ohayou">☀️ おはよう</option>
+        <option value="oyasumi">🌙 おやすみ</option>
+      </select>
+      <select id="theme-select">
+        <option value="pastel">🌸 パステル</option>
+        <option value="cool">🌊 クール</option>
+        <option value="night">🌌 ナイト</option>
+        <option value="cafe">☕ カフェ</option>
+      </select>
+    </div>
+
+    <button id="btn-random-bg" class="btn-primary" style="padding: 10px; font-size: 13px;">✨ 背景をランダム生成</button>
+
+    <div class="ui-row">
+      <input type="text" id="custom-message" value="今日も1日頑張ろう！" placeholder="サブメッセージ" maxlength="30">
+      
+      <select id="font-family" style="width: 110px; flex-shrink: 0; padding: 10px 4px;">
+        <option value="'Zen Maru Gothic', sans-serif">丸ゴシック</option>
+        <option value="'Yusei Magic', sans-serif">手書き風</option>
+        <option value="'Kiwi Maru', serif">レトロ明朝</option>
+      </select>
+
+      <input type="color" id="text-color" value="#555555" title="文字色">
+      
+      <!-- ✅ 修正箇所：白フチを廃止し、ピンクと青のポップなフチに変更 -->
+      <select id="text-outline" style="width: 80px; flex-shrink: 0; padding: 10px 4px; font-size: 11px;">
+        <option value="#ff69b4">ピンクフチ</option>
+        <option value="#4776E6">青フチ</option>
+        <option value="#000000">黒フチ</option>
+        <option value="transparent">なし</option>
+      </select>
+    </div>
+
+    <div class="ui-row" style="background: var(--bg-color); padding: 8px; border-radius: 12px; gap: 8px;">
+      <select id="preset-slot" style="flex: 1; padding: 10px; background: var(--surface); border: 2px solid var(--primary); border-radius: 8px; font-size: 14px; font-weight: bold; color: var(--primary);">
+        <option value="1">👗 マイセット 1</option>
+        <option value="2">👗 マイセット 2</option>
+        <option value="3">👗 マイセット 3</option>
+      </select>
+      <button id="btn-save-preset" class="btn-primary" style="flex: 1; padding: 10px; font-size: 13px; box-shadow: none;">💾 上書き保存</button>
+      <button id="btn-reset" class="btn-small" style="color: var(--danger); background: var(--surface); border: 1px solid var(--border); flex: 0 0 auto;">🔄 リセット</button>
+    </div>
+
+    <div class="export-grid">
+      <button id="btn-save-image" class="btn-primary" style="background: var(--text-main); box-shadow: 0 4px 12px rgba(30, 41, 59, 0.2);">📷 画像を保存</button>
+      <button id="btn-save-video" class="btn-primary btn-export-video">🎥 3秒動画化</button>
+    </div>
+    
+    <button id="btn-share-x" class="btn-primary btn-x-share" style="padding: 10px; font-size: 13px;">𝕏 保存後にX(Twitter)の投稿画面を開く</button>
+    
+    <div style="margin-top: 2px;">
+      <p class="note">※立ち絵は画面上でタッチして移動・拡大・回転できます</p>
+      <p class="note">※推奨画像: 背景透過PNG（縦横1200px以内がスムーズに動きます）</p>
+    </div>
+
+    <!-- 簡単な使い方ガイド -->
+    <details class="disclaimer-accordion" id="guide-box">
+      <summary>📖 簡単な使い方ガイド</summary>
+      <div class="disclaimer-content">
+        <p><strong>1. 立ち絵をセット</strong><br>
+        「🖼️ 立ち絵」ボタンから画像をアップロードします。画面上のキャラクターは指（またはマウス）で直接移動・拡大縮小・回転ができます。</p>
+        <p><strong>2. 背景と文字のカスタマイズ</strong><br>
+        挨拶（おはよう/おやすみ）やテーマを選び、「✨ 背景をランダム生成」でお気に入りの背景を探します。サブメッセージやフォント、文字色・フチ取りも自由に変更可能です。</p>
+        <p><strong>3. マイセットに保存（超便利！）</strong><br>
+        「👗 マイセット 1」などの枠を選んで「💾 上書き保存」を押すと、今の立ち絵の配置やテキスト設定が記憶されます。明日からは枠を切り替えるだけで、一瞬でお着替えが完了します！</p>
+        <p><strong>4. 保存＆シェア</strong><br>
+        「📷 画像を保存」または「🎥 3秒動画化」で端末に保存後、「𝕏」ボタンを押せば、設定したテキストが自動入力された状態でスムーズに投稿画面へ移動できます。</p>
+      </div>
+    </details>
+
+    <!-- 利用規約・免責事項 -->
+    <details class="disclaimer-accordion" id="disclaimer-box">
+      <summary>📝 ご利用にあたって（注意事項と免責事項）</summary>
+      <div class="disclaimer-content">
+        <p>本ツールは完全無料でどなたでもご利用いただけます。日々のSNS投稿や、収益化されている配信・動画での利用（商用利用）も大歓迎です！楽しく安全にお使いいただくため、ご利用の際は以下のルールへのご同意をお願いいたします。</p>
+        <p><strong>⚠️ データの保存・消失について</strong><br>
+        マイセットのデータや立ち絵は「今開いている端末・ブラウザの中（キャッシュ）」に保存されます。ブラウザの履歴やキャッシュを消去したり、シークレットモードで開いた場合、データは引き継がれません。また、データが消えてしまった場合の復旧はできませんのでご了承ください。</p>
+        <p><strong>🎥 動画の保存とX(Twitter)投稿について</strong><br>
+        おまけ機能の動画は、ご利用環境によって「WebM形式」で保存されます。XはWebMの投稿に対応していないため、投稿する際はご自身でアプリ等を使ってMP4形式へ変換していただく必要がございます。</p>
+        <p><strong>🛑 お約束（禁止・注意事項）</strong><br>
+        本ツールで作った画像・動画に関する責任は、すべて「ご利用者様ご自身」に帰属します。以下の行為は固くお断りいたします。
+        <ul>
+          <li>他人のイラストや写真、ロゴなどの無断使用（著作権・肖像権の侵害）</li>
+          <li>誰かを傷つける言葉、過激な表現、公序良俗に反するテキストの入力</li>
+          <li>本ツールを利用して他者とトラブルを起こすこと</li>
+        </ul></p>
+        <p><strong>🛡️ 免責事項（運営からのお願い）</strong><br>
+        ・本ツールの利用によって生じたいかなるトラブルや損害（データの消失、第三者との権利紛争、炎上など）についても、開発者・運営者は一切の責任を負いかねます。<br>
+        ・個人開発のツールのため、予告なく機能の変更、メンテナンス、またはツールの公開を終了する場合がございます。あらかじめご了承ください。</p>
+      </div>
+    </details>
+  </div>
+</div>
+
+<script>
+  const D_WIDTH = 720;
+  const D_HEIGHT = 1280;
+  
+  const canvasCanvas = document.getElementById('mainCanvas');
+  const fabricCanvas = new fabric.Canvas('mainCanvas', {
+    width: D_WIDTH, height: D_HEIGHT, backgroundColor: '#fff', preserveObjectStacking: true,
+  });
+
+  function resizeCanvasDisplay() {
+    const wrapper = document.querySelector('.canvas-wrapper');
+    const container = document.querySelector('.canvas-container');
+    if (!container) return;
+
+    if (container) container.style.display = 'none';
+    const availableWidth = wrapper.clientWidth;
+    const availableHeight = wrapper.clientHeight;
+    if (container) container.style.display = 'block';
+
+    const scale = Math.min(availableWidth / D_WIDTH, availableHeight / D_HEIGHT) * 0.95; 
+
+    container.style.transform = `scale(${scale})`;
+    container.style.transformOrigin = 'top left';
+
+    const scaledWidth = D_WIDTH * scale;
+    const scaledHeight = D_HEIGHT * scale;
+
+    const leftOffset = (availableWidth - scaledWidth) / 2;
+    const topOffset = (availableHeight - scaledHeight) / 2;
+
+    container.style.position = 'absolute';
+    container.style.left = `${leftOffset}px`;
+    container.style.top = `${topOffset}px`;
+  }
+  
+  window.addEventListener('resize', resizeCanvasDisplay);
+
+  const THEMES = {
+    pastel: { hues: [ [320, 360], [0, 40] ], saturation: [70, 90], lightness: [75, 90] },
+    cool:   { hues: [ [180, 220], [200, 240] ], saturation: [60, 85], lightness: [70, 85] },
+    night:  { hues: [ [240, 280], [260, 300] ], saturation: [50, 80], lightness: [20, 40] },
+    cafe:   { hues: [ [20, 40], [30, 50] ], saturation: [40, 60], lightness: [60, 80] }
+  };
+
+  let bgGradientState = {};
+  const PRESET_KEY_PREFIX = 'vtuber_preset_data_slot_v7_'; 
+  
+  let animationFrameId = null; 
+  let isAnimating = true;
+
+  const greetingSelect = document.getElementById('greeting-select');
+  const themeSelect = document.getElementById('theme-select');
+  const messageInput = document.getElementById('custom-message');
+  const textColorInput = document.getElementById('text-color');
+  const fontFamilyInput = document.getElementById('font-family');
+  const outlineSelect = document.getElementById('text-outline');
+  const presetSlotSelect = document.getElementById('preset-slot');
+
+  let characterImage = null;
+  let characterImageDataUrl = null; 
+
+  function getCurrentPresetKey() { return PRESET_KEY_PREFIX + presetSlotSelect.value; }
+
+  function getRandomColorForTheme(themeKey, alpha = 1) {
+    const theme = THEMES[themeKey];
+    const hueRange = theme.hues[Math.floor(Math.random() * theme.hues.length)];
+    const h = Math.floor(Math.random() * (hueRange[1] - hueRange[0])) + hueRange[0];
+    const s = Math.floor(Math.random() * (theme.saturation[1] - theme.saturation[0])) + theme.saturation[0];
+    const l = Math.floor(Math.random() * (theme.lightness[1] - theme.lightness[0])) + theme.lightness[0];
+    return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
+  }
+
+  function setRandomBackground() {
+    const currentThemeKey = themeSelect.value;
+    bgGradientState.color1 = getRandomColorForTheme(currentThemeKey);
+    bgGradientState.color2 = getRandomColorForTheme(currentThemeKey);
+    bgGradientState.theme = currentThemeKey;
+    
+    const gradient = new fabric.Gradient({
+      type: 'linear', coords: { x1: 0, y1: 0, x2: D_WIDTH, y2: D_HEIGHT },
+      colorStops: [ { offset: 0, color: bgGradientState.color1 }, { offset: 1, color: bgGradientState.color2 } ]
+    });
+    fabricCanvas.setBackgroundColor(gradient, fabricCanvas.renderAll.bind(fabricCanvas));
+    generateProceduralDecorations(currentThemeKey);
+  }
+
+  function createStarPolygon(x, y, numPts, outerRadius, innerRadius, fill) {
+    let pts = [];
+    for (let i = 0; i < numPts * 2; i++) {
+      let r = (i % 2 === 0) ? outerRadius : innerRadius;
+      let angle = (i * Math.PI) / numPts;
+      pts.push({ x: x + r * Math.sin(angle), y: y - r * Math.cos(angle) });
+    }
+    return new fabric.Polygon(pts, { left: x, top: y, fill: fill, originX: 'center', originY: 'center', selectable: false, evented: false });
+  }
+
+  function generateProceduralDecorations(themeKey) {
+    const objects = fabricCanvas.getObjects().filter(obj => obj.id === 'decoration' || obj.id === 'bg_layout');
+    objects.forEach(obj => fabricCanvas.remove(obj));
+
+    const layoutTypes = ['solid', 'diagonal', 'wave', 'frame'];
+    const selectedLayout = layoutTypes[Math.floor(Math.random() * layoutTypes.length)];
+    const layoutColor = getRandomColorForTheme(themeKey, 0.4);
+
+    if (selectedLayout === 'diagonal') {
+      const poly = new fabric.Polygon([ {x: 0, y: 0}, {x: D_WIDTH, y: 0}, {x: 0, y: D_HEIGHT} ], { fill: layoutColor, selectable: false, evented: false, id: 'bg_layout' });
+      fabricCanvas.add(poly);
+    } else if (selectedLayout === 'wave') {
+      const waveHeight = Math.random() * 200 + 400;
+      const path = new fabric.Path(`M 0 ${waveHeight} Q ${D_WIDTH/2} ${waveHeight - 300} ${D_WIDTH} ${waveHeight} L ${D_WIDTH} ${D_HEIGHT} L 0 ${D_HEIGHT} z`, { fill: layoutColor, selectable: false, evented: false, id: 'bg_layout' });
+      fabricCanvas.add(path);
+    } else if (selectedLayout === 'frame') {
+      const frame = new fabric.Rect({ left: 20, top: 20, width: D_WIDTH - 40, height: D_HEIGHT - 40, fill: 'transparent', stroke: layoutColor, strokeWidth: 15, rx: 30, ry: 30, selectable: false, evented: false, id: 'bg_layout' });
+      fabricCanvas.add(frame);
+    }
+
+    const elementCount = themeKey === 'night' ? Math.floor(Math.random() * 30) + 40 : Math.floor(Math.random() * 20) + 15;
+
+    for(let i = 0; i < elementCount; i++) {
+      let shape;
+      const x = Math.random() * D_WIDTH;
+      const y = Math.random() * D_HEIGHT;
+      const size = Math.random() * 60 + 20;
+
+      if (themeKey === 'pastel') {
+        const isRing = Math.random() > 0.7;
+        shape = new fabric.Circle({
+          radius: size, left: x, top: y, originX: 'center', originY: 'center',
+          fill: isRing ? 'transparent' : (Math.random() > 0.5 ? 'rgba(255, 255, 255, 0.4)' : getRandomColorForTheme(themeKey, 0.3)),
+          stroke: isRing ? 'rgba(255, 255, 255, 0.6)' : null, strokeWidth: isRing ? 4 : 0,
+          baseX: x, waveSpeed: Math.random() * 0.05 + 0.02, waveAmp: Math.random() * 50 + 20, wavePhase: Math.random() * Math.PI * 2,
+          vy: -Math.random() * 2 - 0.5, vr: isRing ? (Math.random() - 0.5) * 2 : 0 
+        });
+      } else if (themeKey === 'cool') {
+        if (Math.random() > 0.4) {
+          shape = new fabric.Triangle({ width: size, height: size, left: x, top: y, originX: 'center', originY: 'center', fill: getRandomColorForTheme(themeKey, 0.3), vx: 0, vy: -Math.random() * 4 - 1, vr: (Math.random() - 0.5) * 3 });
+        } else {
+          shape = new fabric.Rect({ width: size * 3, height: Math.random() * 10 + 2, left: x, top: y, originX: 'center', originY: 'center', fill: 'rgba(255, 255, 255, 0.3)', angle: -45, vx: 3, vy: -3, vr: 0 });
+        }
+      } else if (themeKey === 'night') {
+        const rand = Math.random();
+        if (rand > 0.85) {
+          shape = new fabric.Circle({ radius: Math.random() * 150 + 50, left: x, top: y, originX: 'center', originY: 'center', fill: getRandomColorForTheme('night', 0.1), shadow: new fabric.Shadow({ blur: 60, color: getRandomColorForTheme('night', 0.6) }), vx: (Math.random() - 0.5) * 0.2, vy: (Math.random() - 0.5) * 0.2 });
+        } else if (rand > 0.75) {
+          shape = new fabric.Rect({ width: Math.random() * 100 + 50, height: 2, left: x, top: y, originX: 'center', originY: 'center', fill: 'rgba(255, 255, 255, 0.8)', angle: -45, vx: 15, vy: -15, vr: 0, shadow: new fabric.Shadow({ blur: 10, color: 'rgba(255, 255, 255, 1)' }) });
+        } else if (rand > 0.5) {
+          shape = new fabric.Circle({ radius: Math.random() * 10 + 5, left: x, top: y, originX: 'center', originY: 'center', fill: 'rgba(255, 255, 255, 0.5)', shadow: new fabric.Shadow({ blur: 20, color: 'rgba(255, 255, 255, 0.9)' }), vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5, vOpacity: (Math.random() * 0.02) + 0.01 });
+        } else {
+          shape = new fabric.Circle({ radius: Math.random() * 2 + 0.5, left: x, top: y, originX: 'center', originY: 'center', fill: 'rgba(255, 255, 255, 0.8)', vx: 0, vy: -Math.random() * 0.5, vOpacity: (Math.random() * 0.03) + 0.01 });
+        }
+      } else if (themeKey === 'cafe') {
+        shape = new fabric.Rect({ width: size, height: size, left: x, top: y, originX: 'center', originY: 'center', fill: getRandomColorForTheme(themeKey, 0.2), angle: 45, rx: 5, ry: 5, vx: (Math.random() - 0.5) * 1, vy: Math.random() * 2 + 1, vr: (Math.random() - 0.5) * 2 });
+      }
+
+      if(shape) { shape.set({ id: 'decoration', selectable: false, evented: false }); fabricCanvas.add(shape); }
+    }
+    
+    reorderCanvasLayers();
+    if (isAnimating) { startAnimation(); } else { fabricCanvas.renderAll(); }
+  }
+
+  function reorderCanvasLayers() {
+    fabricCanvas.getObjects().filter(o => o.id === 'bg_layout').forEach(o => fabricCanvas.sendToBack(o));
+    if (characterImage) fabricCanvas.bringToFront(characterImage);
+    setTelopElements();
+  }
+
+  function startAnimation() {
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    if (!isAnimating) return; 
+    
+    function animate() {
+      if (!isAnimating) return; 
+      const decos = fabricCanvas.getObjects().filter(obj => obj.id === 'decoration');
+      decos.forEach(obj => {
+        if (obj.wavePhase !== undefined) { obj.wavePhase += obj.waveSpeed; obj.left = obj.baseX + Math.sin(obj.wavePhase) * obj.waveAmp; } 
+        else if (obj.vx !== undefined) { obj.left += obj.vx; }
+
+        if (obj.vy !== undefined) obj.top += obj.vy;
+        if (obj.vr !== undefined) obj.angle += obj.vr;
+        
+        if (obj.top > D_HEIGHT + 200) obj.top = -200; if (obj.top < -200) obj.top = D_HEIGHT + 200;
+        if (obj.left > D_WIDTH + 200) obj.left = -200; if (obj.left < -200) obj.left = D_WIDTH + 200;
+
+        if (obj.vOpacity !== undefined) {
+          let currentOpacity = obj.opacity + obj.vOpacity;
+          if (currentOpacity > 1 || currentOpacity < 0) { obj.vOpacity = -obj.vOpacity; }
+          obj.set('opacity', currentOpacity);
+        }
+      });
+      fabricCanvas.renderAll();
+      animationFrameId = requestAnimationFrame(animate);
+    }
+    animate();
+  }
+
+  document.getElementById('btn-toggle-anim').addEventListener('click', function() {
+    isAnimating = !isAnimating; 
+    if (isAnimating) {
+      this.innerText = '⏸️ アニメ停止';
+      this.classList.remove('anim-stopped');
+      startAnimation();
+    } else {
+      this.innerText = '▶️ アニメ再生';
+      this.classList.add('anim-stopped');
+      if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+    }
+  });
+
+  function setTelopElements() {
+    const objects = fabricCanvas.getObjects().filter(obj => obj.id && obj.id.startsWith('telop_'));
+    objects.forEach(obj => fabricCanvas.remove(obj));
+
+    const boxW = D_WIDTH - 60; const boxH = 220; const boxX = (D_WIDTH - boxW) / 2; const boxY = D_HEIGHT - boxH - 50;
+    const telopBox = new fabric.Rect({ id: 'telop_box', left: boxX, top: boxY, width: boxW, height: boxH, fill: 'rgba(255, 255, 255, 0.85)', stroke: '#ffffff', strokeWidth: 6, rx: 20, ry: 20, selectable: false, evented: false });
+
+    const isOhayou = greetingSelect.value === 'ohayou';
+    const mainTextStr = isOhayou ? '#おはようVtuber' : '#おやすみVtuber';
+    const textGradient = new fabric.Gradient({ type: 'linear', coords: { x1: 0, y1: 0, x2: 0, y2: 60 }, colorStops: isOhayou ? [ { offset: 0, color: '#ff8a00' }, { offset: 1, color: '#e52e71' } ] : [ { offset: 0, color: '#00c6ff' }, { offset: 1, color: '#0072ff' } ] });
+
+    const fontVal = fontFamilyInput.value;
+
+    const titleText = new fabric.Text(mainTextStr, { 
+      id: 'telop_title', left: D_WIDTH / 2, top: boxY + 40, fontSize: 60, fontWeight: '900', 
+      fontFamily: fontVal, fill: textGradient, stroke: '#ffffff', strokeWidth: 12, paintFirst: 'stroke', 
+      shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.2)', blur: 10, offsetX: 0, offsetY: 5 }), 
+      originX: 'center', selectable: false, evented: false 
+    });
+
+    const strokeColor = outlineSelect.value;
+    const hasStroke = strokeColor !== 'transparent';
+    
+    const messageText = new fabric.Textbox(messageInput.value, { 
+      id: 'telop_message', left: D_WIDTH / 2, top: boxY + 115, fontSize: 34, fontWeight: 'bold', 
+      fontFamily: fontVal, fill: textColorInput.value, 
+      stroke: hasStroke ? strokeColor : null,
+      strokeWidth: hasStroke ? 6 : 0,
+      paintFirst: 'stroke',
+      shadow: hasStroke ? new fabric.Shadow({ color: 'rgba(0,0,0,0.1)', blur: 4, offsetX: 0, offsetY: 2 }) : null,
+      originX: 'center', selectable: false, evented: false, 
+      width: boxW - 60, textAlign: 'center', splitByGrapheme: true 
+    });
+
+    if (messageText.textLines.length > 2) {
+      let line1 = messageText.textLines[0] || '';
+      let line2 = messageText.textLines[1] || '';
+      let safeText = line1 + line2.slice(0, -1) + '…';
+      messageText.set('text', safeText);
+    }
+
+    fabricCanvas.add(telopBox, titleText, messageText);
+    fabricCanvas.bringToFront(telopBox); fabricCanvas.bringToFront(titleText); fabricCanvas.bringToFront(messageText);
+  }
+
+  function compressImage(dataUrl, callback) {
+    const img = new Image();
+    img.onload = function() {
+      const MAX_DIMENSION = 1200; 
+      let width = img.width; let height = img.height;
+      if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+        if (width > height) { height *= MAX_DIMENSION / width; width = MAX_DIMENSION; } 
+        else { width *= MAX_DIMENSION / height; height = MAX_DIMENSION; }
+      }
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width; tempCanvas.height = height;
+      const ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      let compressedDataUrl = tempCanvas.toDataURL('image/webp', 0.8);
+      if (compressedDataUrl.indexOf('data:image/webp') !== 0) { compressedDataUrl = tempCanvas.toDataURL('image/png'); }
+      callback(compressedDataUrl);
+    };
+    img.src = dataUrl;
+  }
+
+  document.getElementById('image-upload').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      compressImage(event.target.result, function(compressedDataUrl) {
+        characterImageDataUrl = compressedDataUrl; 
+        fabric.Image.fromURL(characterImageDataUrl, function(img) {
+          if (characterImage) fabricCanvas.remove(characterImage);
+          const scale = Math.min((D_WIDTH * 0.9) / img.width, (D_HEIGHT * 0.7) / img.height);
+          img.set({ id: 'character', scaleX: scale, scaleY: scale, left: (D_WIDTH - img.width * scale) / 2, top: D_HEIGHT - (img.height * scale) - 180, cornerColor: '#4776E6', cornerSize: 24, cornerStyle: 'circle', transparentCorners: false, padding: 10 });
+          characterImage = img; fabricCanvas.add(img); fabricCanvas.setActiveObject(img); reorderCanvasLayers();
+        });
+      });
+    }
+    reader.readAsDataURL(file);
+  });
+
+  [messageInput, textColorInput, fontFamilyInput, greetingSelect, outlineSelect].forEach(input => { 
+    input.addEventListener('input', setTelopElements); 
+  });
+  
+  greetingSelect.addEventListener('change', function() { 
+    if(this.value === 'oyasumi') { themeSelect.value = 'night'; } 
+    else if(this.value === 'ohayou' && themeSelect.value === 'night') { themeSelect.value = 'pastel'; } 
+    setRandomBackground(); 
+  });
+  
+  themeSelect.addEventListener('change', setRandomBackground);
+  
+  document.getElementById('btn-random-bg').addEventListener('click', setRandomBackground);
+  
+  document.getElementById('btn-reset').addEventListener('click', function() { 
+    if(animationFrameId) cancelAnimationFrame(animationFrameId); 
+    fabricCanvas.clear(); characterImage = null; characterImageDataUrl = null; init(); 
+  });
+
+  document.getElementById('btn-save-preset').addEventListener('click', function() {
+    if (!characterImage || !characterImageDataUrl) { alert('立ち絵を追加してから保存してください。'); return; }
+    const presetData = { 
+      bgGradient: bgGradientState, greeting: greetingSelect.value, message: messageInput.value, 
+      textColor: textColorInput.value, fontFamily: fontFamilyInput.value, textOutline: outlineSelect.value, 
+      theme: themeSelect.value, imageDataUrl: characterImageDataUrl, 
+      charState: { left: characterImage.left, top: characterImage.top, scaleX: characterImage.scaleX, scaleY: characterImage.scaleY, angle: characterImage.angle } 
+    };
+    try { 
+      localStorage.setItem(getCurrentPresetKey(), JSON.stringify(presetData)); 
+      alert(`${presetSlotSelect.options[presetSlotSelect.selectedIndex].text} に現在の状態を保存しました！\n（次回から枠を選ぶだけで自動で着替えます）`); 
+    } 
+    catch (e) { alert('保存エラー：画像の容量が大きすぎます。'); }
+  });
+
+  function loadPresetData() {
+    const data = JSON.parse(localStorage.getItem(getCurrentPresetKey()));
+    if (!data) return; 
+    
+    bgGradientState = data.bgGradient; 
+    greetingSelect.value = data.greeting || 'ohayou'; 
+    messageInput.value = data.message; 
+    textColorInput.value = data.textColor; 
+    fontFamilyInput.value = data.fontFamily; 
+    if(data.textOutline) { outlineSelect.value = data.textOutline; }
+    if(data.theme) { themeSelect.value = data.theme; }
+    
+    const gradient = new fabric.Gradient({ type: 'linear', coords: { x1: 0, y1: 0, x2: D_WIDTH, y2: D_HEIGHT }, colorStops: [ { offset: 0, color: bgGradientState.color1 }, { offset: 1, color: bgGradientState.color2 } ] });
+    fabricCanvas.setBackgroundColor(gradient, fabricCanvas.renderAll.bind(fabricCanvas)); 
+    generateProceduralDecorations(themeSelect.value);
+    
+    if (data.imageDataUrl) {
+      characterImageDataUrl = data.imageDataUrl;
+      fabric.Image.fromURL(characterImageDataUrl, function(img) {
+        if (characterImage) fabricCanvas.remove(characterImage);
+        img.set(data.charState); img.set({ id: 'character', cornerColor: '#4776E6', cornerSize: 24, cornerStyle: 'circle', transparentCorners: false, padding: 10 });
+        characterImage = img; fabricCanvas.add(img); fabricCanvas.setActiveObject(img); reorderCanvasLayers();
+      });
+    }
+  }
+
+  presetSlotSelect.addEventListener('change', loadPresetData);
+
+  document.getElementById('btn-save-image').addEventListener('click', function() {
+    fabricCanvas.discardActiveObject().renderAll();
+    const dataURL = fabricCanvas.toDataURL({ format: 'png', quality: 1.0 });
+    const link = document.createElement('a'); link.download = `vtuber-maker-${Date.now()}.png`; link.href = dataURL; link.click();
+  });
+
+  document.getElementById('btn-save-video').addEventListener('click', function() {
+    const btn = this; btn.disabled = true; btn.innerText = '🔴 録画中... (待機)';
+    let wasPaused = !isAnimating;
+    if (wasPaused) { isAnimating = true; startAnimation(); }
+    fabricCanvas.discardActiveObject().renderAll();
+    const stream = canvasCanvas.captureStream(30);
+    
+    let mimeType = 'video/webm;codecs=vp9';
+    if (!MediaRecorder.isTypeSupported(mimeType)) { mimeType = 'video/webm'; if (!MediaRecorder.isTypeSupported(mimeType)) { mimeType = 'video/mp4'; } }
+    
+    const recorder = new MediaRecorder(stream, { mimeType: mimeType });
+    const chunks = [];
+    recorder.ondataavailable = function(e) { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = function() {
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const link = document.createElement('a'); link.href = url; link.download = `ohayou-vtuber-movie.${ext}`; link.click();
+      URL.revokeObjectURL(url);
+      btn.disabled = false; btn.innerHTML = '🎥 3秒動画化';
+      if (wasPaused) { isAnimating = false; cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+    };
+    
+    recorder.start(); setTimeout(() => { recorder.stop(); }, 3000);
+  });
+
+  document.getElementById('btn-share-x').addEventListener('click', function() {
+    const hashTag = greetingSelect.value === 'ohayou' ? '#おはようVtuber' : '#おやすみVtuber';
+    const subMsg = messageInput.value;
+    const tweetText = subMsg ? `${hashTag}\n\n${subMsg}` : `${hashTag}\n\n`;
+    const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
+    window.open(intentUrl, '_blank');
+  });
+
+  // 🌟 アコーディオンを開いた時、自動で下までスクロール
+  function autoScrollToBottom(e) {
+    if (e.target.open) {
+      const bottomSheet = document.getElementById('bottom-sheet');
+      setTimeout(() => {
+        bottomSheet.scrollTo({ top: bottomSheet.scrollHeight, behavior: 'smooth' });
+      }, 50);
+    }
+  }
+  document.getElementById('guide-box').addEventListener('toggle', autoScrollToBottom);
+  document.getElementById('disclaimer-box').addEventListener('toggle', autoScrollToBottom);
+
+  function init() {
+    document.fonts.ready.then(() => {
+      fabricCanvas.setWidth(D_WIDTH); fabricCanvas.setHeight(D_HEIGHT);
+      setRandomBackground(); 
+      loadPresetData(); 
+      setTimeout(resizeCanvasDisplay, 50); 
+    });
+  }
+  init();
+
+</script>
+</body>
+</html>
